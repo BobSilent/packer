@@ -1,6 +1,7 @@
 package googlecompute
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -15,7 +16,7 @@ import (
 
 	compute "google.golang.org/api/compute/v1"
 
-	"github.com/hashicorp/packer/common"
+	"github.com/hashicorp/packer/common/retry"
 	"github.com/hashicorp/packer/helper/useragent"
 	"github.com/hashicorp/packer/packer"
 
@@ -103,15 +104,16 @@ func NewDriverGCE(ui packer.Ui, p string, a *AccountFile) (Driver, error) {
 	}, nil
 }
 
-func (d *driverGCE) CreateImage(name, description, family, zone, disk string, image_labels map[string]string, image_licenses []string) (<-chan *Image, <-chan error) {
+func (d *driverGCE) CreateImage(name, description, family, zone, disk string, image_labels map[string]string, image_licenses []string, image_encryption_key *compute.CustomerEncryptionKey) (<-chan *Image, <-chan error) {
 	gce_image := &compute.Image{
-		Description: description,
-		Name:        name,
-		Family:      family,
-		Labels:      image_labels,
-		Licenses:    image_licenses,
-		SourceDisk:  fmt.Sprintf("%s%s/zones/%s/disks/%s", d.service.BasePath, d.projectId, zone, disk),
-		SourceType:  "RAW",
+		Description:        description,
+		Name:               name,
+		Family:             family,
+		Labels:             image_labels,
+		Licenses:           image_licenses,
+		ImageEncryptionKey: image_encryption_key,
+		SourceDisk:         fmt.Sprintf("%s%s/zones/%s/disks/%s", d.service.BasePath, d.projectId, zone, disk),
+		SourceType:         "RAW",
 	}
 
 	imageCh := make(chan *Image, 1)
@@ -608,14 +610,18 @@ type stateRefreshFunc func() (string, error)
 // waitForState will spin in a loop forever waiting for state to
 // reach a certain target.
 func waitForState(errCh chan<- error, target string, refresh stateRefreshFunc) error {
-	err := common.Retry(2, 2, 0, func(_ uint) (bool, error) {
+	ctx := context.TODO()
+	err := retry.Config{
+		RetryDelay: (&retry.Backoff{InitialBackoff: 2 * time.Second, MaxBackoff: 2 * time.Second, Multiplier: 2}).Linear,
+	}.Run(ctx, func(ctx context.Context) error {
 		state, err := refresh()
 		if err != nil {
-			return false, err
-		} else if state == target {
-			return true, nil
+			return err
 		}
-		return false, nil
+		if state == target {
+			return nil
+		}
+		return fmt.Errorf("retrying for state %s, got %s", target, state)
 	})
 	errCh <- err
 	return err

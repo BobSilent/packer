@@ -14,6 +14,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+func boolPointer(tf bool) *bool {
+	return &tf
+}
+
 func TestParse(t *testing.T) {
 	cases := []struct {
 		File   string
@@ -96,6 +100,19 @@ func TestParse(t *testing.T) {
 					{
 						Type:        "something",
 						PauseBefore: 1 * time.Second,
+					},
+				},
+			},
+			false,
+		},
+
+		{
+			"parse-provisioner-timeout.json",
+			&Template{
+				Provisioners: []*Provisioner{
+					{
+						Type:    "something",
+						Timeout: 5 * time.Minute,
 					},
 				},
 			},
@@ -205,7 +222,7 @@ func TestParse(t *testing.T) {
 						{
 							Name:              "foo",
 							Type:              "foo",
-							KeepInputArtifact: true,
+							KeepInputArtifact: boolPointer(true),
 						},
 					},
 				},

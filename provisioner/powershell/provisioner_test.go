@@ -2,8 +2,7 @@ package powershell
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
+	"context"
 	"io/ioutil"
 	"os"
 	"regexp"
@@ -356,7 +355,7 @@ func TestProvisionerProvision_ValidExitCodes(t *testing.T) {
 	comm := new(packer.MockCommunicator)
 	comm.StartExitStatus = 200
 	p.Prepare(config)
-	err := p.Provision(ui, comm)
+	err := p.Provision(context.Background(), ui, comm)
 	if err != nil {
 		t.Fatal("should not have error")
 	}
@@ -379,7 +378,7 @@ func TestProvisionerProvision_InvalidExitCodes(t *testing.T) {
 	comm := new(packer.MockCommunicator)
 	comm.StartExitStatus = 201 // Invalid!
 	p.Prepare(config)
-	err := p.Provision(ui, comm)
+	err := p.Provision(context.Background(), ui, comm)
 	if err == nil {
 		t.Fatal("should have error")
 	}
@@ -400,7 +399,7 @@ func TestProvisionerProvision_Inline(t *testing.T) {
 	p.config.PackerBuilderType = "iso"
 	comm := new(packer.MockCommunicator)
 	p.Prepare(config)
-	err := p.Provision(ui, comm)
+	err := p.Provision(context.Background(), ui, comm)
 	if err != nil {
 		t.Fatal("should not have error")
 	}
@@ -420,7 +419,7 @@ func TestProvisionerProvision_Inline(t *testing.T) {
 	config["remote_path"] = "c:/Windows/Temp/inlineScript.ps1"
 
 	p.Prepare(config)
-	err = p.Provision(ui, comm)
+	err = p.Provision(context.Background(), ui, comm)
 	if err != nil {
 		t.Fatal("should not have error")
 	}
@@ -449,7 +448,7 @@ func TestProvisionerProvision_Scripts(t *testing.T) {
 	p := new(Provisioner)
 	comm := new(packer.MockCommunicator)
 	p.Prepare(config)
-	err := p.Provision(ui, comm)
+	err := p.Provision(context.Background(), ui, comm)
 	if err != nil {
 		t.Fatal("should not have error")
 	}
@@ -485,7 +484,7 @@ func TestProvisionerProvision_ScriptsWithEnvVars(t *testing.T) {
 	p := new(Provisioner)
 	comm := new(packer.MockCommunicator)
 	p.Prepare(config)
-	err := p.Provision(ui, comm)
+	err := p.Provision(context.Background(), ui, comm)
 	if err != nil {
 		t.Fatal("should not have error")
 	}
@@ -502,6 +501,22 @@ func TestProvisionerProvision_UISlurp(t *testing.T) {
 	// UI should be called n times
 
 	// UI should receive following messages / output
+}
+
+func TestProvisionerProvision_UploadFails(t *testing.T) {
+	config := testConfig()
+	ui := testUi()
+
+	p := new(Provisioner)
+	comm := new(packer.ScriptUploadErrorMockCommunicator)
+	p.Prepare(config)
+	p.config.StartRetryTimeout = time.Second
+	err := p.Provision(context.Background(), ui, comm)
+	if !strings.Contains(err.Error(), packer.ScriptUploadErrorMockCommunicatorError.Error()) {
+		t.Fatalf("expected Provision() error %q to contain %q",
+			err.Error(),
+			packer.ScriptUploadErrorMockCommunicatorError.Error())
+	}
 }
 
 func TestProvisioner_createFlattenedElevatedEnvVars_windows(t *testing.T) {
@@ -639,36 +654,6 @@ func TestProvision_uploadEnvVars(t *testing.T) {
 
 	if comm.UploadCalled != true {
 		t.Fatalf("Failed to upload env var file")
-	}
-}
-
-func TestRetryable(t *testing.T) {
-	config := testConfig()
-
-	count := 0
-	retryMe := func() error {
-		t.Logf("RetryMe, attempt number %d", count)
-		if count == 2 {
-			return nil
-		}
-		count++
-		return errors.New(fmt.Sprintf("Still waiting %d more times...", 2-count))
-	}
-	retryableSleep = 50 * time.Millisecond
-	p := new(Provisioner)
-	p.config.StartRetryTimeout = 155 * time.Millisecond
-	err := p.Prepare(config)
-	err = p.retryable(retryMe)
-	if err != nil {
-		t.Fatalf("should not have error retrying function")
-	}
-
-	count = 0
-	p.config.StartRetryTimeout = 10 * time.Millisecond
-	err = p.Prepare(config)
-	err = p.retryable(retryMe)
-	if err == nil {
-		t.Fatalf("should have error retrying function")
 	}
 }
 

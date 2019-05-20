@@ -1,6 +1,7 @@
 package vmcx
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -94,6 +95,7 @@ type Config struct {
 	EnableVirtualizationExtensions bool   `mapstructure:"enable_virtualization_extensions"`
 	TempPath                       string `mapstructure:"temp_path"`
 	Version                        string `mapstructure:"configuration_version"`
+	KeepRegistered                 bool   `mapstructure:"keep_registered"`
 
 	Communicator string `mapstructure:"communicator"`
 
@@ -372,7 +374,7 @@ func (b *Builder) Prepare(raws ...interface{}) ([]string, error) {
 
 // Run executes a Packer build and returns a packer.Artifact representing
 // a Hyperv appliance.
-func (b *Builder) Run(ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
+func (b *Builder) Run(ctx context.Context, ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
 	// Create the driver that we'll use to communicate with Hyperv
 	driver, err := hypervcommon.NewHypervPS4Driver()
 	if err != nil {
@@ -440,6 +442,7 @@ func (b *Builder) Run(ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
 			SecureBootTemplate:             b.config.SecureBootTemplate,
 			EnableVirtualizationExtensions: b.config.EnableVirtualizationExtensions,
 			MacAddress:                     b.config.MacAddress,
+			KeepRegistered:                 b.config.KeepRegistered,
 		},
 
 		&hypervcommon.StepEnableIntegrationService{},
@@ -527,7 +530,7 @@ func (b *Builder) Run(ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
 
 	// Run the steps.
 	b.runner = common.NewRunner(steps, b.config.PackerConfig, ui)
-	b.runner.Run(state)
+	b.runner.Run(ctx, state)
 
 	// Report any errors.
 	if rawErr, ok := state.GetOk("error"); ok {
@@ -547,12 +550,6 @@ func (b *Builder) Run(ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
 }
 
 // Cancel.
-func (b *Builder) Cancel() {
-	if b.runner != nil {
-		log.Println("Cancelling the step runner...")
-		b.runner.Cancel()
-	}
-}
 
 func appendWarnings(slice []string, data ...string) []string {
 	m := len(slice)

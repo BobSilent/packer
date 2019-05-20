@@ -54,7 +54,7 @@ For the [Google Developers Console](https://console.developers.google.com):
 1.  Choose "Show advanced options"
 2.  Tick "Enable Compute Engine service account"
 3.  Choose "Read Write" for Compute
-4.  Chose "Full" for "Storage"
+4.  Choose "Full" for "Storage"
 
 **The service account will be used automatically by Packer as long as there is
 no *account file* specified in the Packer configuration file.**
@@ -166,6 +166,9 @@ setting a valid `account_file` and `project_id`:
 }
 ```
 
+-> **Warning:** Please note that if you're setting up WinRM for provisioning, you'll probably want to turn it off or restrict its permissions as part of a shutdown script at the end of Packer's provisioning process. For more details on the why/how, check out this useful blog post and the associated code:
+https://cloudywindows.io/post/winrm-for-provisioning---close-the-door-on-the-way-out-eh/
+
 This build can take up to 15 min.
 
 ### Nested Hypervisor Example
@@ -266,6 +269,17 @@ builder.
 
 -   `image_name` (string) - The unique name of the resulting image. Defaults to
     `"packer-{{timestamp}}"`.
+
+-   `image_encryption_key` (object of encryption key) - Image encryption key to apply to the created image. Possible values:
+    * kmsKeyName -  The name of the encryption key that is stored in Google Cloud KMS.
+    * RawKey: - A 256-bit customer-supplied encryption key, encodes in RFC 4648 base64.
+
+    example: 
+    ``` json
+    {
+      "kmsKeyName": "projects/${project}/locations/${region}/keyRings/computeEngine/cryptoKeys/computeEngine/cryptoKeyVersions/4"
+    }
+    ```
 
 -   `instance_name` (string) - A name to give the launched instance. Beware
     that this must be unique. Defaults to `"packer-{{uuid}}"`.

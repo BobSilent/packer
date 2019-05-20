@@ -5,8 +5,8 @@
 package vagrantcloud
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -117,15 +117,15 @@ func (p *PostProcessor) Configure(raws ...interface{}) error {
 	return nil
 }
 
-func (p *PostProcessor) PostProcess(ui packer.Ui, artifact packer.Artifact) (packer.Artifact, bool, error) {
+func (p *PostProcessor) PostProcess(ctx context.Context, ui packer.Ui, artifact packer.Artifact) (packer.Artifact, bool, bool, error) {
 	if _, ok := builtins[artifact.BuilderId()]; !ok {
-		return nil, false, fmt.Errorf(
+		return nil, false, false, fmt.Errorf(
 			"Unknown artifact type, requires box from vagrant post-processor or vagrant builder: %s", artifact.BuilderId())
 	}
 
 	// We assume that there is only one .box file to upload
 	if !strings.HasSuffix(artifact.Files()[0], ".box") {
-		return nil, false, fmt.Errorf(
+		return nil, false, false, fmt.Errorf(
 			"Unknown files in artifact, vagrant box is required: %s", artifact.Files())
 	}
 
@@ -142,7 +142,7 @@ func (p *PostProcessor) PostProcess(ui packer.Ui, artifact packer.Artifact) (pac
 	}
 	boxDownloadUrl, err := interpolate.Render(p.config.BoxDownloadUrl, &p.config.ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("Error processing box_download_url: %s", err)
+		return nil, false, false, fmt.Errorf("Error processing box_download_url: %s", err)
 	}
 
 	// Set up the state
@@ -177,22 +177,14 @@ func (p *PostProcessor) PostProcess(ui packer.Ui, artifact packer.Artifact) (pac
 
 	// Run the steps
 	p.runner = common.NewRunner(steps, p.config.PackerConfig, ui)
-	p.runner.Run(state)
+	p.runner.Run(ctx, state)
 
 	// If there was an error, return that
 	if rawErr, ok := state.GetOk("error"); ok {
-		return nil, false, rawErr.(error)
+		return nil, false, false, rawErr.(error)
 	}
 
-	return NewArtifact(providerName, p.config.Tag), true, nil
-}
-
-// Runs a cleanup if the post processor fails to upload
-func (p *PostProcessor) Cancel() {
-	if p.runner != nil {
-		log.Println("Cancelling the step runner...")
-		p.runner.Cancel()
-	}
+	return NewArtifact(providerName, p.config.Tag), true, false, nil
 }
 
 // converts a packer builder name to the corresponding vagrant

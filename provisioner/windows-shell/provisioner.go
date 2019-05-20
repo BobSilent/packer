@@ -4,6 +4,7 @@ package shell
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/packer/common"
+	"github.com/hashicorp/packer/common/retry"
 	"github.com/hashicorp/packer/common/shell"
 	"github.com/hashicorp/packer/helper/config"
 	"github.com/hashicorp/packer/packer"
@@ -40,7 +42,7 @@ type Config struct {
 
 	// This is used in the template generation to format environment variables
 	// inside the `ExecuteCommand` template.
-	EnvVarFormat string
+	EnvVarFormat string `mapstructure:"env_var_format"`
 
 	ctx interpolate.Context
 }
@@ -159,7 +161,7 @@ func extractScript(p *Provisioner) (string, error) {
 	return temp.Name(), nil
 }
 
-func (p *Provisioner) Provision(ui packer.Ui, comm packer.Communicator) error {
+func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.Communicator) error {
 	ui.Say(fmt.Sprintf("Provisioning with windows-shell..."))
 	scripts := make([]string, len(p.config.Scripts))
 	copy(scripts, p.config.Scripts)
@@ -203,7 +205,7 @@ func (p *Provisioner) Provision(ui packer.Ui, comm packer.Communicator) error {
 		// and then the command is executed but the file doesn't exist
 		// any longer.
 		var cmd *packer.RemoteCmd
-		err = p.retryable(func() error {
+		err = retry.Config{StartTimeout: p.config.StartRetryTimeout}.Run(ctx, func(ctx context.Context) error {
 			if _, err := f.Seek(0, 0); err != nil {
 				return err
 			}
@@ -213,7 +215,7 @@ func (p *Provisioner) Provision(ui packer.Ui, comm packer.Communicator) error {
 			}
 
 			cmd = &packer.RemoteCmd{Command: command}
-			return cmd.StartWithUi(comm, ui)
+			return cmd.RunWithUi(ctx, comm, ui)
 		})
 		if err != nil {
 			return err
@@ -222,44 +224,12 @@ func (p *Provisioner) Provision(ui packer.Ui, comm packer.Communicator) error {
 		// Close the original file since we copied it
 		f.Close()
 
-		if err := p.config.ValidExitCode(cmd.ExitStatus); err != nil {
+		if err := p.config.ValidExitCode(cmd.ExitStatus()); err != nil {
 			return err
 		}
 	}
 
 	return nil
-}
-
-func (p *Provisioner) Cancel() {
-	// Just hard quit. It isn't a big deal if what we're doing keeps
-	// running on the other side.
-	os.Exit(0)
-}
-
-// retryable will retry the given function over and over until a
-// non-error is returned.
-func (p *Provisioner) retryable(f func() error) error {
-	startTimeout := time.After(p.config.StartRetryTimeout)
-	for {
-		var err error
-		if err = f(); err == nil {
-			return nil
-		}
-
-		// Create an error and log it
-		err = fmt.Errorf("Retryable error: %s", err)
-		log.Print(err.Error())
-
-		// Check if we timed out, otherwise we retry. It is safe to
-		// retry since the only error case above is if the command
-		// failed to START.
-		select {
-		case <-startTimeout:
-			return err
-		default:
-			time.Sleep(retryableSleep)
-		}
-	}
 }
 
 func (p *Provisioner) createFlattenedEnvVars() (flattened string) {

@@ -1,10 +1,71 @@
-## 1.4.0 (Upcoming)
+## 1.4.2 (upcoming)
+
+## 1.4.1 (May 15, 2019)
+
+### IMPROVEMENTS:
+* **new builder:** new proxmox builder implemented [GH-7490]
+* **new builder:** new yandex cloud builder implemented [GH-7484]
+* **new builder:** new linode builder implemented [GH-7508]
+* build: Circle CI now generates test binaries for all pull requests [GH-7624]
+    [GH-7625] [GH-7630]
+* builder/alicloud: Support encryption with default service key [GH-7574]
+* builder/amazon: Users of chroot and ebssurrogate builders may now choose
+    between "x86_64" and "arm64" architectures when registering their AMIs.
+    [GH-7620]
+* builder/amazon: Users of the ebssurrogage builder may now choose to omit
+    certain launch_block_devices from the final AMI mapping by using the
+    omit_from_artifact feature. [GH-7612]
+* builder/azure: Update Azure SDK [GH-7563]
+* builder/docker: Better error messaging with container downloads. [GH-7513]
+* builder/google: add image encryption support [GH-7551]
+* builder/hyperv: Add keep_registered option to hyperv [GH-7498]
+* builder/qemu: Replace dot-based parsing with hashicorp/go-version [GH-7614]
+* builder/vmware: Add 30 minute timeout for destroying a VM [GH-7553]
+* core: Cleanup cache of used port after closing [GH-7613]
+* core: New option to set number of builds running in parallel & test
+    BuildCommand more [GH-7501]
+* packer compiles on s390x [GH-7567]
+* provisioner/file: Added warnings about writeable locations [GH-7494]
+
+
+### BUG FIXES:
+* builder/amazon: Fix bug that always encrypted build region with default key.
+    [GH-7507]
+* builder/amazon: Fix bug that wasn't deleting unencrypted temporary snapshots
+    [GH-7521]
+* builder/amazon: Fix EBSsurrogate copy, encryption, and deletion of temporary
+    unencrypted amis. [GH-7598]
+* builder/hyperv: Fixes IP detection error if more than one VMNetworkAdapter is
+    found [GH-7480]
+* builder/qemu: Fix mistake switching ssh port mix/max for vnc port min/max
+    [GH-7615]
+* builder/vagrant: Fix bug with builder and vagrant-libvirt plugin [GH-7633]
+* builder/virtualbox: Don't fail download when checksum is not set. [GH-7512]
+* builder/virtualbox: Fix ovf download failures by using local ovf files in
+    place instead of symlinking [GH-7497]
+* builder/vmware: Fix panic configuring VNC for remote builds [GH-7509]
+* core/build: Allow building Packer on solaris by removing progress bar and tty
+    imports on solaris [GH-7618]
+* core: Fix race condition causing hang [GH-7579]
+* core: Fix tty related panics [GH-7517]
+* core: Step download: Always copy local files on windows rather than
+    symlinking them [GH-7575]
+* packer compiles on Solaris again [GH-7589] [GH-7618]
+* post-processor/vagrant: Fix bug in retry logic that caused failed upload to
+    report success. [GH-7554]
+
+## 1.4.0 (April 11, 2019)
 
 ### IMPROVEMENTS:
 * builder/alicloud: Improve error message for conflicting images name [GH-7415]
 * builder/amazon-chroot: Allow users to specify custom block device mapping
     [GH-7370]
+* builder/ansible: Documentation fix explaining how to use ansible 2.7 + winrm
+    [GH-7461]
 * builder/azure-arm: specify zone resilient image from config [GH-7211]
+* builder/docker: Add support for windows containers [GH-7444]
+* builder/openstack: Allow both ports and networks in openstack builder
+    [GH-7451]
 * builder/openstack: Expose force_delete for openstack builder [GH-7395]
 * builder/OpenStack: Support Application Credential Authentication [GH-7300]
 * builder/virtualbox: Add validation for 'none' communicator. [GH-7419]
@@ -16,6 +77,9 @@
 * core: Lock Packer VNC ports using a lock file to prevent collisions [GH-7422]
 * core: Print VerifyChecksum log for the download as ui.Message output
     [GH-7387]
+* core: Users can now set provisioner timeouts [GH-7466]
+* core: Switch to using go mod for managing dependencies [GH-7270]
+* core: Select a new VNC port if initial port is busy [GH-7423]
 * post-processor/googlecompute-export: Set network project id to builder
     [GH-7359]
 * post-processor/vagrant-cloud: support for the vagrant builder [GH-7397]
@@ -24,6 +88,8 @@
 * postprocessor/amazon-import: Support S3 and AMI encryption. [GH-7396]
 * provisioner/shell provisioner/windows-shell: allow to specify valid exit
     codes [GH-7385]
+* core: Filter sensitive variables out of the ui as well as the logs
+    [GH-7462]
 
 ### BUG FIXES:
 * builder/alibaba: Update to latest Alibaba Cloud official image to fix
@@ -31,19 +97,32 @@
 * builder/amazon-chroot: Fix building PV images and where mount_partition is
     set [GH-7337]
 * builder/amazon: Fix http_proxy env var regression [GH-7361]
+* builder/azure: Fix: Power off before taking snapshot (windows) [GH-7464]
 * builder/hcloud: Fix usage of freebsd64 rescue image [GH-7381]
 * builder/vagrant: windows : fix docs and usage [GH-7416] [GH-7417]
 * builder/vmware-esxi: properly copy .vmxf files in remote vmx builds [GH-7357]
 * core: fix bug where Packer didn't pause in debug on certain linux platforms.
     [GH-7352]
+* builder/amazon: Fix bug copying encrypted images between regions [GH-7342]
 
 ### BACKWARDS INCOMPATIBILITIES:
+* builder/amazon: Change `temporary_security_group_source_cidr` to
+    `temporary_security_group_source_cidrs` and allow it to accept a list of
+    strings. [GH-7450]
 * builder/amazon: If users do not pass any encrypt setting, retain any initial
     encryption setting of the AMI. [GH-6787]
 * builder/docker: Update docker's default config to use /bin/sh instead of
     /bin/bash [GH-7106]
+* builder/hyperv: Change option names cpu->cpus and ram_size->memory to bring
+    naming in line with vmware and virtualbox builders [GH-7447]
+* builder/oracle-classic: Remove default ssh_username from oracle classic
+    builder, but add note to docs with oracle's default user. [GH-7446]
 * builder/scaleway: Renamed attribute api_access_key to organization_id.
     [GH-6983]
+* Change clean_image name and clean_ami_name to a more general clean_resource
+    name for Googlecompute, Azure, and AWS builders. [GH-7456]
+* core/post-processors: Change interface for post-processors to allow an
+    overridable default for keeping input artifacts. [GH-7463]
 
 ## 1.3.5 (February 28, 2019)
 

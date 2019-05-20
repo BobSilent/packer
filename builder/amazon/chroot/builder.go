@@ -5,8 +5,8 @@
 package chroot
 
 import (
+	"context"
 	"errors"
-	"log"
 	"runtime"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -46,6 +46,7 @@ type Config struct {
 	SourceAmi         string                     `mapstructure:"source_ami"`
 	SourceAmiFilter   awscommon.AmiFilterOptions `mapstructure:"source_ami_filter"`
 	RootVolumeTags    awscommon.TagMap           `mapstructure:"root_volume_tags"`
+	Architecture      string                     `mapstructure:"ami_architecture"`
 
 	ctx interpolate.Context
 }
@@ -81,6 +82,10 @@ func (b *Builder) Prepare(raws ...interface{}) ([]string, error) {
 		return nil, err
 	}
 
+	if b.config.Architecture == "" {
+		b.config.Architecture = "x86_64"
+	}
+
 	if b.config.PackerConfig.PackerForce {
 		b.config.AMIForceDeregister = true
 	}
@@ -102,7 +107,6 @@ func (b *Builder) Prepare(raws ...interface{}) ([]string, error) {
 
 	// set default copy file if we're not giving our own
 	if b.config.CopyFiles == nil {
-		b.config.CopyFiles = make([]string, 0)
 		if !b.config.FromScratch {
 			b.config.CopyFiles = []string{"/etc/resolv.conf"}
 		}
@@ -181,6 +185,16 @@ func (b *Builder) Prepare(raws ...interface{}) ([]string, error) {
 				errs, errors.New("If root_device_name is specified, ami_block_device_mappings must be specified"))
 		}
 	}
+	valid := false
+	for _, validArch := range []string{"x86_64", "arm64"} {
+		if validArch == b.config.Architecture {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		errs = packer.MultiErrorAppend(errs, errors.New(`The only valid ami_architecture values are "x86_64" and "arm64"`))
+	}
 
 	if errs != nil && len(errs.Errors) > 0 {
 		return warns, errs
@@ -190,7 +204,7 @@ func (b *Builder) Prepare(raws ...interface{}) ([]string, error) {
 	return warns, nil
 }
 
-func (b *Builder) Run(ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
+func (b *Builder) Run(ctx context.Context, ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
 	if runtime.GOOS != "linux" {
 		return nil, errors.New("The amazon-chroot builder only works on Linux environments.")
 	}
@@ -202,9 +216,9 @@ func (b *Builder) Run(ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
 	ec2conn := ec2.New(session)
 
 	wrappedCommand := func(command string) (string, error) {
-		ctx := b.config.ctx
-		ctx.Data = &wrappedCommandTemplate{Command: command}
-		return interpolate.Render(b.config.CommandWrapper, &ctx)
+		ictx := b.config.ctx
+		ictx.Data = &wrappedCommandTemplate{Command: command}
+		return interpolate.Render(b.config.CommandWrapper, &ictx)
 	}
 
 	// Setup the state bag and initial state for the steps
@@ -281,9 +295,11 @@ func (b *Builder) Run(ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
 		&awscommon.StepAMIRegionCopy{
 			AccessConfig:      &b.config.AccessConfig,
 			Regions:           b.config.AMIRegions,
+			AMIKmsKeyId:       b.config.AMIKmsKeyId,
 			RegionKeyIds:      b.config.AMIRegionKMSKeyIDs,
 			EncryptBootVolume: b.config.AMIEncryptBootVolume,
 			Name:              b.config.AMIName,
+			OriginalRegion:    *ec2conn.Config.Region,
 		},
 		&awscommon.StepModifyAMIAttributes{
 			Description:    b.config.AMIDescription,
@@ -303,7 +319,7 @@ func (b *Builder) Run(ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
 
 	// Run!
 	b.runner = common.NewRunner(steps, b.config.PackerConfig, ui)
-	b.runner.Run(state)
+	b.runner.Run(ctx, state)
 
 	// If there was an error, return that
 	if rawErr, ok := state.GetOk("error"); ok {
@@ -323,11 +339,4 @@ func (b *Builder) Run(ui packer.Ui, hook packer.Hook) (packer.Artifact, error) {
 	}
 
 	return artifact, nil
-}
-
-func (b *Builder) Cancel() {
-	if b.runner != nil {
-		log.Println("Cancelling the step runner...")
-		b.runner.Cancel()
-	}
 }
