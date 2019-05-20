@@ -63,7 +63,6 @@ POSIX-like environments (macOS, Linux, Cygwin, etc.) so you may need to
 adjust them for Windows or other shells.
 The instructions below are for go 1.7. or later.
 
-
 1. Download the Packer source (and its dependencies) by running
    `go get github.com/hashicorp/packer`. This will download the Packer source to
    `$GOPATH/src/github.com/hashicorp/packer`.
@@ -85,6 +84,21 @@ The instructions below are for go 1.7. or later.
 
 5. If everything works well and the tests pass, run `go fmt` on your code before
    submitting a pull-request.
+   
+### Windows Systems
+On windows system you need at least the mingw Tools, install with choco:
+```
+choco install mingw -y
+```
+This install the gcc compile as well as a ```mingw32-make``` which can be used wherever 
+this documentation mentions ```make```
+
+when building using ```go``` you also need to mention the windows
+executable extension
+```
+go build -o bin/packer.exe 
+```
+
 
 ### Opening an Pull Request
 
